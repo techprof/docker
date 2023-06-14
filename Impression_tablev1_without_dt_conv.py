@@ -3,49 +3,28 @@ from awsglue.transforms import *
 from awsglue.utils import getResolvedOptions
 from pyspark.context import SparkContext
 from awsglue.context import GlueContext
-from pyspark.sql import SparkSession
-from pyspark.sql.functions import col
-from datetime import datetime, timedelta
+from awsglue.job import Job
 
-# Initialize GlueContext and SparkSession
+# Initialize contexts and job
 sc = SparkContext()
 glueContext = GlueContext(sc)
 spark = glueContext.spark_session
+job = Job(glueContext)
+job.init(sys.argv[0], args)
 
-# Retrieve arguments passed from the Glue job
-args = getResolvedOptions(sys.argv, ['DATABASE', 'SOURCE_TABLE', 'TARGET_TABLE'])
+# Read source data
+source_table = glueContext.create_dynamic_frame.from_catalog(database="your_database", table_name="your_table_name")
 
-# Get the source table from the Glue Data Catalog
-database = args['DATABASE']
-source_table = args['SOURCE_TABLE']
-target_table = args['TARGET_TABLE']
+# Filter data and remove null values
+filtered_data = Filter.apply(frame=source_table, f=lambda x: x["year"] >= "2023" and x["month"] >= "03" and x["day"] >= "01" and x["hour"] >= "00" and x["year"] <= "2023" and x["month"] <= "05" and x["day"] <= "31" and x["hour"] <= "23" and x["year"] is not None and x["month"] is not None and x["day"] is not None and x["hour"] is not None)
 
-# Calculate the date 90 days ago
-end_date = datetime.now().date()
-start_date = end_date - timedelta(days=90)
+# Repartition data based on day
+repartitioned_data = Repartition.apply(frame=filtered_data, num_partitions=31, partition_func=lambda x: int(x["day"]))
 
-# Read the source table data from Glue Data Catalog
-source_data_frame = glueContext.create_dynamic_frame.from_catalog(database=database, table_name=source_table)
+# Convert dynamic frame to Spark DataFrame
+converted_data = repartitioned_data.toDF()
 
-# Convert the source dynamic frame to a Spark DataFrame
-source_df = source_data_frame.toDF()
+# Write the transformed data to a new table
+converted_data.write.partitionBy("day").format("parquet").mode("overwrite").saveAsTable("your_new_table_name")
 
-# Apply the filter to get data within the 90-day range and remove null data
-filtered_df = source_df.filter((col("year") > start_date.year) |
-                               (col("year") == start_date.year) & (col("month") > start_date.month) |
-                               (col("year") == start_date.year) & (col("month") == start_date.month) &
-                               (col("day") >= start_date.day))
-
-filtered_df = filtered_df.dropna()
-
-# Create a dynamic frame from the filtered Spark DataFrame
-target_dynamic_frame = glueContext.create_dynamic_frame.from_catalog(database=database, table_name=source_table)
-
-# Write the dynamic frame to a new table in the Glue Data Catalog
-glueContext.write_dynamic_frame.from_catalog(dynamic_frame=target_dynamic_frame,
-                                             database=database,
-                                             table_name=target_table,
-                                             transformation_ctx="target")
-
-# Print the schema of the new table
-print(f"New table schema: {target_dynamic_frame.schema()}")
+job.commit()
