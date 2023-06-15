@@ -8,46 +8,57 @@
 
 
 
-# Use the official Ubuntu base image
+# Use the Ubuntu base image
 FROM ubuntu:latest
 
-# Update the package lists
-RUN apt-get update
+# Pull the Ubuntu image from Docker Hub
+RUN docker pull ubuntu:latest
 
-# Install dependencies: curl, git
-RUN apt-get install -y curl git
+# Install necessary packages
+RUN apt-get update && apt-get install -y \
+    curl \
+    git \
+    python3 \
+    python3-pip
 
 # Install Visual Studio Code
-RUN curl -fsSL https://code.visualstudio.com/docs/?dv=linux64_deb | apt-key add -
-RUN echo "deb [arch=amd64] https://packages.microsoft.com/repos/vscode stable main" | tee /etc/apt/sources.list.d/vscode.list
-RUN apt-get update
-RUN apt-get install -y code
+RUN curl -fsSL https://code.visualstudio.com/docs/?dv=linux64_deb > code.deb && \
+    dpkg -i code.deb && \
+    apt-get install -f -y && \
+    rm code.deb
 
-# Install Python and pip
-RUN apt-get install -y python3 python3-pip
-
-# Install virtualenv
+# Install Python packages
 RUN pip3 install virtualenv
 
-# Create and activate the virtual environment
-RUN virtualenv venv
-RUN . venv/bin/activate
+# Create and activate Python virtual environment
+RUN virtualenv /venv
+ENV PATH="/venv/bin:$PATH"
+
+# Set user-specific PATH
+ENV PATH="/home/user/bin:$PATH"
+
+# Create a non-root user
+RUN useradd -ms /bin/bash user
+USER user
+WORKDIR /home/user
+
+# Activate Python virtual environment
+RUN echo "source /venv/bin/activate" >> ~/.bashrc
 
 # Install Python libraries
 COPY requirements.txt .
-RUN pip3 install -r requirements.txt
+RUN pip3 install --user -r requirements.txt
 
 # Clone the Git repository
-RUN git clone https://github.com/techprof/docker app
+RUN git clone <git_repo_url>
 
-# Change working directory
-WORKDIR /app
+# Set working directory
+WORKDIR /home/user/path/to/repo
 
-# Run dbt specific commands
-RUN dbt clean
-RUN dbt compile
-RUN dbt run
+# Run specific commands using dbt (replace with your commands)
+RUN dbt clean && \
+    dbt debug && \
+    dbt run
 
-# Set the default command
-CMD ["bash"]
-
+# Set the default command to run when the container starts
+CMD ["bash", "--rcfile", "/home/user/.bashrc"]
