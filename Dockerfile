@@ -6,7 +6,7 @@
 
 #Remember to build the Docker image using the docker build command and then run a container based on the image using the docker run command.
 
-In this updated script, after switching to the non-root user, we append the command source /venv/bin/activate to the ~/.bashrc file to automatically activate the Python virtual environment whenever the user logs in.
+# In this updated script, after switching to the non-root user, we append the command source /venv/bin/activate to the ~/.bashrc file to automatically activate the Python virtual environment whenever the user logs in.
 
 # Use the Ubuntu base image
 FROM ubuntu:latest
